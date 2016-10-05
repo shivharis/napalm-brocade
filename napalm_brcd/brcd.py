@@ -20,23 +20,18 @@ from napalm_base.exceptions import ReplaceConfigException, MergeConfigException
 import difflib
 import os, sys
 import re
+
 from shutil import copyfile
 from StringIO import StringIO
-import pdb
 
 EXPORT_HOST = "10.24.88.6"
 EXPORT_USER = "shh"
-EXPORT_PASSWORD = "ss"
-
-#SWITCH_HOST = "10.24.84.38"
-#EXPORT_USER = "admin"
-#EXPORT_PASSWORD = "password"
-
-CANDIDATE_CONFIG = "_candidate.cfg"
+EXPORT_PASSWORD = "shh"
 
 class BrcdDriver(NetworkDriver):
 
-    def __init__(self, hostname, username, password, timeout=60, optional_args=None):
+    def __init__(self, hostname, username, password, timeout=60,
+                 optional_args=None):
 
         if optional_args is None:
             optional_args = {}
@@ -75,7 +70,8 @@ class BrcdDriver(NetworkDriver):
         for command in commands:
             output = self.device.send_command(command)
             if 'Invalid input detected' in output:
-                raise ValueError('Unable to execute command "{}"'.format(command))
+                raise ValueError(
+                    'Unable to execute command "{}"'.format(command))
             cli_output.setdefault(command, {})
             cli_output[command] = output
 
@@ -104,7 +100,6 @@ class BrcdDriver(NetworkDriver):
             line = lines.pop(0)
             if 'Realtime Statistics' in line:
                 line = lines.pop(0)
-                # CPU utilization for five seconds: 2%/0%; one minute: 2%; five minutes: 1%
                 cpu_regex = r'^.*One minute: (\d+\.\d+); Five.*$'
                 match = re.search(cpu_regex, line)
                 if match is None:
@@ -112,13 +107,22 @@ class BrcdDriver(NetworkDriver):
                 environment['cpu'][0]['%load'] = float(match.group(1))
                 break
 
-        # Initialize 'power', 'fan', and 'temperature' to default values (not implemented)
+        # Initialize 'power', 'fan', and 'temperature' to default values
+        # (not implemented)
+
         environment.setdefault('power', {})
-        environment['power']['invalid'] = {'status': True, 'output': -1.0, 'capacity': -1.0}
+        environment['power']['invalid'] = {
+            'status': True,
+            'output': -1.0,
+            'capacity': -1.0
+            }
         environment.setdefault('fans', {})
         environment['fans']['invalid'] = {'status': True}
         environment.setdefault('temperature', {})
-        environment['temperature']['invalid'] = {'is_alert': False, 'is_critical': False, 'temperature': -1.0}
+        environment['temperature']['invalid'] = {
+            'is_alert': False,
+            'is_critical': False,
+            'temperature': -1.0}
         return environment
 
 
@@ -174,7 +178,9 @@ class BrcdDriver(NetworkDriver):
                         age = 0
                     age = float(age)
                 except ValueError:
-                    print("Unable to convert age value to float: {}".format(age))
+                    print(
+                        "Unable to convert age value to float: {}".format(age)
+                        )
                 entry = {
                     'interface': interface,
                     'mac': mac,
@@ -183,7 +189,8 @@ class BrcdDriver(NetworkDriver):
                 }
                 arp_table.append(entry)
             else:
-                raise ValueError("Unexpected output from: {}".format(line.split()))
+                raise ValueError(
+                    "Unexpected output from: {}".format(line.split()))
 
         return arp_table
 
@@ -199,6 +206,7 @@ class BrcdDriver(NetworkDriver):
         for line in output:
 
             fields = line.split()
+
             """
             # Brocade CLI outputs
             #
@@ -215,15 +223,16 @@ class BrcdDriver(NetworkDriver):
             Ethernet 0/1           unassigned          default-vrf             administratively down     down
             Ethernet 0/2           unassigned          default-vrf             administratively down     down
             Ethernet 0/3           unassigned          default-vrf             administratively down     down
-
             """
 
 
             # Check for administratively down
             if len(fields) == 6:
-                interface_type, interface, ip_address, status, status2, protocol = fields
+                interface_type, interface, ip_address, status, \
+                    status2, protocol = fields
             elif len(fields) == 7:
-                interface_type, interface, ip_address, vrf, status, status2, protocol = fields
+                interface_type, interface, ip_address, vrf, status, \
+                    status2, protocol = fields
             else:
                 raise ValueError(u"Unexpected Response from the device")
 
@@ -324,7 +333,8 @@ class BrcdDriver(NetworkDriver):
             if len(line) == 0:
                 return {}
             if len(line.split()) == 9:
-                interface_type, interface, pkts_rx, pkts_tx, err_rx, err_tx, discards_rx, discards_tx, crc_rx = \
+                interface_type, interface, pkts_rx, pkts_tx, \
+                    err_rx, err_tx, discards_rx, discards_tx, crc_rx = \
                     line.split()
                 entry = {
                     'interface_type': interface_type,
@@ -334,7 +344,8 @@ class BrcdDriver(NetworkDriver):
                 }
                 counters_table.append(entry)
             else:
-                raise ValueError("Unexpected output from: {}".format(line.split()))
+                raise ValueError(
+                    "Unexpected output from: {}".format(line.split()))
 
         return counters_table
             
