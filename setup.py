@@ -12,7 +12,7 @@ reqs = [str(ir.req) for ir in install_reqs]
 
 setup(
     name="napalm-brcd",
-    version="0.1.0",
+    version="0.2.1",
     packages=find_packages(),
     author="Shiv Haris",
     author_email="sharis@brocade.com",
