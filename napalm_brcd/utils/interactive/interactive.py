@@ -70,7 +70,7 @@ def main(config_file):
     show_help()
 
     while True:
-        line = raw_input("\nOperation you would like to perform? (For help: [help | ?]): ")
+        line = raw_input("\nOperation you would like to perform? (For help: [help | ?]): ").lower()
         arg = shlex.split(line)
         argc = len(arg)
         if argc < 1:

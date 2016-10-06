@@ -21,12 +21,30 @@ import difflib
 import os, sys
 import re
 
+from oslo_config import cfg
 from shutil import copyfile
 from StringIO import StringIO
 
+
+# TBD(shh) Put this in config file (oslo_config)
 EXPORT_HOST = "10.24.88.6"
 EXPORT_USER = "shh"
 EXPORT_PASSWORD = "shh"
+
+service_opts = [
+    cfg.StrOpt('external_host',
+                  default="",
+                  help='External host where merge/candidate can be imported from'),
+    cfg.StrOpt('external_host_username',
+                 default="",
+                 help='External Host creditials'),
+    cfg.StrOpt('external_host_password',
+                 default="",
+                 help='External Host creditials')
+]
+
+CONF = cfg.CONF
+CONF.register_opts(service_opts)
 
 class BrcdDriver(NetworkDriver):
 
@@ -125,7 +143,6 @@ class BrcdDriver(NetworkDriver):
             'temperature': -1.0}
         return environment
 
-
     def get_facts(self):
         cmd = "show system"
         fact_table = {}
@@ -153,7 +170,6 @@ class BrcdDriver(NetworkDriver):
                 fact_table["management_ip"] = mgmt_ip
 
         return fact_table
-
 
     def get_arp_table(self):
         """
@@ -319,7 +335,6 @@ class BrcdDriver(NetworkDriver):
         cmd = "oscmd rm /var/config/vcs/scripts/_candidate.cfg"
         output = self.device.send_command(cmd)
 
-
     def get_interfaces_counters(self):
         cmd = "show interface stats brief"
         lines = self.device.send_command(cmd)
@@ -349,20 +364,15 @@ class BrcdDriver(NetworkDriver):
 
         return counters_table
             
-
     def get_mac_address_table(self):
+        """Get mac address table (TBD)."""
+
         cmd = "show mac-address-table"
         lines = self.device.send_command(cmd)
         lines = lines.split('\n')
         mac_table = []
         return mac_table
 
-
-    def get_lldp_neigbors(self):
-        pass
-
-    def get_lldp_neigbors(self, interface = ''):
-        pass
 
 
 
