@@ -13,47 +13,39 @@
 # License for the specific language governing permissions and limitations under
 # the License.
 
-from netmiko import ConnectHandler, FileTransfer
+"""
+Brocade-Napalm Driver.
+
+This driver is meant for SLX and NOS based switches.
+"""
+from netmiko import ConnectHandler
 from napalm_base.base import NetworkDriver
-from napalm_base.exceptions import ReplaceConfigException, MergeConfigException
+from napalm_base.exceptions import ConnectionException, MergeConfigException, \
+    ReplaceConfigException, SessionLockedException, CommandErrorException
 
-import difflib
-import os, sys
+import os
 import re
-
-from oslo_config import cfg
 from shutil import copyfile
-from StringIO import StringIO
 
 
 # TBD(shh) Put this in config file (oslo_config)
 EXPORT_HOST = "10.24.88.6"
 EXPORT_USER = "shh"
-EXPORT_PASSWORD = "shh"
-
-service_opts = [
-    cfg.StrOpt('external_host',
-                  default="",
-                  help='External host where merge/candidate can be imported from'),
-    cfg.StrOpt('external_host_username',
-                 default="",
-                 help='External Host creditials'),
-    cfg.StrOpt('external_host_password',
-                 default="",
-                 help='External Host creditials')
-]
-
-CONF = cfg.CONF
-CONF.register_opts(service_opts)
+EXPORT_PASSWORD = "ss"
 
 class BrcdDriver(NetworkDriver):
+    """Napalm Driver for Vendor Brocade."""
 
     def __init__(self, hostname, username, password, timeout=60,
                  optional_args=None):
+        """
+        CTOR for the device.
+        """
 
         if optional_args is None:
             optional_args = {}
 
+        self.device = None
         self.hostname = hostname
         self.username = username
         self.password = password
@@ -63,12 +55,17 @@ class BrcdDriver(NetworkDriver):
 
     def open(self):
         """Open a connection to the device."""
-        self.device = ConnectHandler(device_type='brocade_vdx',
-                                     ip=self.hostname,
-                                     port=self.port,
-                                     username=self.username,
-                                     password=self.password,
-                                     verbose=True)
+        try:
+            self.device = ConnectHandler(device_type='brocade_vdx',
+                                         ip=self.hostname,
+                                         port=self.port,
+                                         username=self.username,
+                                         password=self.password,
+                                         timeout=self.timeout,
+                                         verbose=True)
+        except Exception:
+            raise ConnectionException("Cannot connect to switch: %s:%s" \
+                                          % (self.hostname, self.port))
 
     def close(self):
         """Close the connection to the device."""
@@ -96,6 +93,7 @@ class BrcdDriver(NetworkDriver):
         return cli_output
 
     def send_command(self, cmd):
+        """Send the cmd to the switch for execution."""
         output = self.device.send_command(cmd)
         if 'Invalid input detected' in output:
             raise ValueError('Unable to execute command "{}"'.format(cmd))
@@ -159,9 +157,11 @@ class BrcdDriver(NetworkDriver):
                 uptime = match.group(1)
                 fact_table["uptime"] = uptime
 
-            match = re.search("^.*Version.*: (.*)$", line)
+            match = re.search("^(.*) Version.*: (.*)$", line)
             if match:
-                os_version = match.group(1)
+                os_type = match.group(1)
+                os_version = match.group(2)
+                fact_table["os_type"] = os_type
                 fact_table["os_version"] = os_version
 
             match = re.search("^Management IP.*: (.*)$", line)
@@ -169,7 +169,38 @@ class BrcdDriver(NetworkDriver):
                 mgmt_ip = match.group(1)
                 fact_table["management_ip"] = mgmt_ip
 
+            match = re.search("^Fan . is (.*)$", line)
+            if match:
+                fan_status = match.group(1)
+                fact_table["fan"] = fan_status
+
         return fact_table
+
+    def get_vlan_table(self):
+        """
+        Get VLAN table.
+        """
+        vlan_table = []
+
+        vlan_cmd = 'show vlan brief'
+        output = self.device.send_command(vlan_cmd)
+        output = output.split('\n')
+
+        # Skip the first two lines which is the header
+        output = output[5:-1]
+
+        for line in output:
+            if len(line) == 0:
+                continue
+
+            vlans = line.split()
+            entry = {
+                'vlan': vlans[0],
+                'name': vlans[1]
+                }
+            vlan_table.append(entry)
+
+        return vlan_table
 
     def get_arp_table(self):
         """
@@ -188,7 +219,7 @@ class BrcdDriver(NetworkDriver):
             if len(line) == 0:
                 return {}
             if len(line.split()) == 6:
-                address, mac, interface, macresolved, age, type = line.split()
+                address, mac, interface, macresolved, age, typ = line.split()
                 try:
                     if age == '-':
                         age = 0
@@ -201,6 +232,7 @@ class BrcdDriver(NetworkDriver):
                     'interface': interface,
                     'mac': mac,
                     'ip': address,
+                    'type': typ,
                     'age': age
                 }
                 arp_table.append(entry)
@@ -270,27 +302,28 @@ class BrcdDriver(NetworkDriver):
         return interface_list
 
     def reboot(self):
+        """Reload the switch."""
         cmd = "reload system\ny\n"
-        output = self.device.send_command(cmd)
-        pass
+        self.device.send_command(cmd)
 
     def commit_config(self):
+        """Commit the candidate configuration."""
         cmd = "copy flash://_candidate.cfg running-config"
-        output = self.device.send_command(cmd)        
+        self.device.send_command(cmd)        
 
     def _checkpoint_running_config(self):
+        """Checkpoint running config."""
         cmd = "oscmd rm /var/config/vcs/scripts/_running.cfg"
-        output = self.device.send_command(cmd)
+        self.device.send_command(cmd)
         cmd = "copy running-config flash://_running.cfg"
-        output = self.device.send_command(cmd) 
-        return output
+        self.device.send_command(cmd)
 
     def _checkpoint_startup_config(self):
+        """Checkpoint startup config if it exists."""
         cmd = "oscmd rm /var/config/vcs/scripts/_startup.cfg"
-        output = self.device.send_command(cmd)
+        self.device.send_command(cmd)
         cmd = "copy startup-config flash://_startup.cfg"
-        output = self.device.send_command(cmd)
-        return output
+        self.device.send_command(cmd)
 
     def load_replace_candidate(self, filename, config=None):
 
@@ -298,42 +331,39 @@ class BrcdDriver(NetworkDriver):
         copyfile(filename, dst)
 
         cmd = "oscmd rm /var/config/vcs/scripts/_candidate.cfg"
-        output = self.device.send_command(cmd)
+        self.device.send_command(cmd)
 
         cmd = "copy scp://%s:%s@%s/tmp/%s flash://_candidate.cfg" \
             % (EXPORT_USER, EXPORT_PASSWORD, EXPORT_HOST, filename)
-        output = self.device.send_command(cmd)
+
+        self.device.send_command(cmd)
 
     def load_merge_candidate(self, filename=None, config=None):
 
         dst = "%s/tmp/%s" % (os.environ['HOME'], filename)
         copyfile(filename, dst)
-
         cmd = "oscmd rm /var/config/vcs/scripts/_candidate.cfg"
-        output = self.device.send_command(cmd)
-
+        self.device.send_command(cmd)
         cmd = "copy scp://%s:%s@%s/tmp/%s flash://_candidate.cfg" \
             % (EXPORT_USER, EXPORT_PASSWORD, EXPORT_HOST, filename)
 
-        output = self.device.send_command(cmd)
+        self.device.send_command(cmd)
 
     def rollback_config(self):
 
         print "Reloading previous checkpoint ..."
         cmd = "copy flash://_running.cfg running_config"
-        output = self.device.send_command(cmd) 
+        self.device.send_command(cmd) 
         self.reboot()
-        return output
 
     def compare_config(self):
 
         cmd = "oscmd diff /var/config/vcs/scripts/_running.cfg /var/config/vcs/scripts/_candidate.cfg"
-        output = self.device.send_command(cmd)
-        return output
+        self.device.send_command(cmd)
 
     def discard_config(self):
         cmd = "oscmd rm /var/config/vcs/scripts/_candidate.cfg"
-        output = self.device.send_command(cmd)
+        self.device.send_command(cmd)
 
     def get_interfaces_counters(self):
         cmd = "show interface stats brief"
@@ -370,9 +400,29 @@ class BrcdDriver(NetworkDriver):
         cmd = "show mac-address-table"
         lines = self.device.send_command(cmd)
         lines = lines.split('\n')
-        mac_table = []
-        return mac_table
 
+        mac_address_table = []
+        # Skip the first four lines which is the header
+        lines = lines[1:-1]
 
+        for line in lines:
+            if len(line) == 0:
+                return {}
+            if len(line.split()) == 7:
+                vlanid, tt, mac_address, type, state, port_type, port = \
+                    line.split()
+                entry = {
+                    'vlanid': vlanid,
+                    'mac+address': mac_address,
+                    'type': type,
+                    'state': state,
+                    'port_type': port_type,
+                    'port': port
+                }
+                mac_address_table.append(entry)
+            else:
+                raise ValueError(
+                    "Unexpected output from: {}".format(line.split()))
 
-
+        return mac_address_table
+            

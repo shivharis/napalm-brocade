@@ -6,21 +6,46 @@
 # 'new_good.conf' configuration saved to disk.
 
 
-import napalm
-import sys
-
-import os
-import re
 import shlex
-import pdb
-import pprint
 import json
 
-SWITCH_IP   = "10.24.91.128"
-SWITCH_USER = "admin"
-SWITCH_PASS = "password"
+from oslo_config import cfg
+
+import napalm
+
+service_opts = [
+
+    cfg.StrOpt('switch_type',
+                  default="",
+                  help='Type of Brocade switch (SLX/VDX)'),
+    cfg.StrOpt('switch_ip',
+                  default="",
+                  help='Switch Mgmt IP Address'),
+    cfg.StrOpt('switch_username',
+                 default="",
+                 help='Switch Mgmt creditials - username'),
+    cfg.StrOpt('switch_password',
+                 default="",
+                 help='Switch Mgmt creditials - password'),
+
+    cfg.StrOpt('external_host',
+                  default="",
+                  help='External host where merge/candidate can be imported from'),
+    cfg.StrOpt('external_host_username',
+                 default="",
+                 help='External Host creditials'),
+    cfg.StrOpt('external_host_password',
+                 default="",
+                 help='External Host creditials')
+
+]
+
+CONF = cfg.CONF
+CONF.register_opts(service_opts, "napalm")
+
 
 def show_help():
+    """Show the help menu."""
 
     print "\n\n"
 
@@ -28,8 +53,9 @@ def show_help():
     print "[icounters] Get Interface counters"
     print "\n"
 
-    print "[arp]   Get ARP table"
-    print "[mac]   Get MAC Table"
+    print "[vlans] Show vlans"
+    print "[arps]   Get ARP table"
+    print "[macs]   Get MAC Table"
     print "[facts] Facts about the switch"
     print "[env]   Get Enviroment"
     print "\n"
@@ -48,25 +74,16 @@ def show_help():
     print "[help|?] Help (this message)"
     print "[quit|q] Quit"
     
-def main(config_file):
-    """Load a config for the device."""
-
-    if not (os.path.exists(config_file) and os.path.isfile(config_file)):
-        msg = 'Missing or invalid config file {0}'.format(config_file)
-        raise ValueError(msg)
-
-    print 'Loading config file {0}.'.format(config_file)
-
+def main():
 
     # Use the appropriate network driver to connect to the device:
     driver = napalm.get_network_driver('brcd')
 
     # Connect and Open device:
-    device = driver(hostname=SWITCH_IP, username=SWITCH_USER,
-                    password=SWITCH_PASS, optional_args={'port': 22})
+    device = driver(hostname=CONF.napalm.switch_ip, username=CONF.napalm.switch_username,
+                    password=CONF.napalm.switch_password, optional_args={'port': 22})
     device.open()
 
-    pp = pprint.PrettyPrinter(indent=4)
     show_help()
 
     while True:
@@ -86,8 +103,8 @@ def main(config_file):
             break
 
         elif choice == 'checkpoint':
-            st = device._checkpoint_running_config()
-            st = device._checkpoint_startup_config()
+            device._checkpoint_running_config()
+            device._checkpoint_startup_config()
             print "Checkpoint of startup and running config DONE"
 
         elif choice == 'ifaces':
@@ -101,6 +118,10 @@ def main(config_file):
         elif choice == 'env':
             env = device.get_environment()
             print json.dumps(env, sort_keys=True, indent=4)
+
+        elif choice == 'vlans':
+            table = device.get_vlan_table()
+            print json.dumps(table, sort_keys=True, indent=4)
 
         elif choice == 'arps':
             table = device.get_arp_table()
@@ -157,10 +178,6 @@ def main(config_file):
     print 'Done.'
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print 'Please supply the full path to "new_good.conf"'
-        sys.exit(1)
-    config_file = sys.argv[1]
-
-    main(config_file)
+    CONF(default_config_files=['napalm.conf'])
+    main()
 
