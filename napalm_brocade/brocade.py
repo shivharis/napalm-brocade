@@ -33,7 +33,7 @@ EXPORT_HOST = "10.24.88.6"
 EXPORT_USER = "shh"
 EXPORT_PASSWORD = "ss"
 
-class BrcdDriver(NetworkDriver):
+class BrocadeDriver(NetworkDriver):
     """Napalm Driver for Vendor Brocade."""
 
     def __init__(self, hostname, username, password, timeout=60,
