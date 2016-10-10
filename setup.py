@@ -11,7 +11,7 @@ install_reqs = parse_requirements('requirements.txt', session=uuid.uuid1())
 reqs = [str(ir.req) for ir in install_reqs]
 
 setup(
-    name="napalm-brcd",
+    name="napalm-brocade",
     version="0.2.2",
     packages=find_packages(),
     author="Shiv Haris",
@@ -25,7 +25,7 @@ setup(
         'Operating System :: POSIX :: Linux',
         'Operating System :: MacOS',
     ],
-    url="https://github.com/napalm-automation/napalm-brcd",
+    url="https://github.com/napalm-automation/napalm-brocade",
     include_package_data=True,
     install_requires=reqs,
 )

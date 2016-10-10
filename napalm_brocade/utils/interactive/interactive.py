@@ -77,7 +77,7 @@ def show_help():
 def main():
 
     # Use the appropriate network driver to connect to the device:
-    driver = napalm.get_network_driver('brcd')
+    driver = napalm.get_network_driver('brocade')
 
     # Connect and Open device:
     device = driver(hostname=CONF.napalm.switch_ip, username=CONF.napalm.switch_username,
