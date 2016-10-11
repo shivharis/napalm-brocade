@@ -19,19 +19,25 @@ Brocade-Napalm Driver.
 This driver is meant for SLX and NOS based switches.
 """
 from netmiko import ConnectHandler
+from napalm_base import helpers
 from napalm_base.base import NetworkDriver
 from napalm_base.exceptions import ConnectionException, MergeConfigException, \
     ReplaceConfigException, SessionLockedException, CommandErrorException
 
 import os
+import pdb
 import re
 from shutil import copyfile
+from napalm_brocade.nos.nosdriver import NOSdriver as nosdriver
 
+import pprint
 
 # TBD(shh) Put this in config file (oslo_config)
 EXPORT_HOST = "10.24.88.6"
 EXPORT_USER = "shh"
 EXPORT_PASSWORD = "ss"
+
+pp = pprint.PrettyPrinter(indent=4)
 
 class BrocadeDriver(NetworkDriver):
     """Napalm Driver for Vendor Brocade."""
@@ -61,8 +67,7 @@ class BrocadeDriver(NetworkDriver):
                                          port=self.port,
                                          username=self.username,
                                          password=self.password,
-                                         timeout=self.timeout,
-                                         verbose=True)
+                                         timeout=self.timeout)
         except Exception:
             raise ConnectionException("Cannot connect to switch: %s:%s" \
                                           % (self.hostname, self.port))
@@ -79,7 +84,7 @@ class BrocadeDriver(NetworkDriver):
         """
         cli_output = dict()
 
-        if type(commands) is not list:
+        if not isinstance(commands, list):
             raise TypeError('Please enter a valid list of commands!')
 
         for command in commands:
@@ -101,44 +106,82 @@ class BrocadeDriver(NetworkDriver):
 
     def get_environment(self):
 
-        environment = {}
-        cpu_cmd = 'show proc cpu'
+        environment = dict()
+
+        environment['cpu'] = dict()
+        environment['available_ram'] = ''
+        environment['used_ram'] = ''
+
+        cmd = 'show environment fan'
+        output = self.device.send_command(cmd)
+        lines = output.splitlines()
+
+        fans = dict()
+        for line in lines:
+            fan = dict()
+            regex = r'^Fan (.*) is (.*),.*$'
+            match = re.search(regex, line)
+            if match:
+                fanindex = match.group(1)
+                fan['status'] = match.group(2) == "Ok"
+                fans[fanindex] = fan
+
+
+        environment['fans'] = fans
+
+        cmd = 'show environment power'
+        output = self.device.send_command(cmd)
+        lines = output.splitlines()
+        lines = lines[1:-1]
+
+        powers = dict()
+        for line in lines:
+            power = dict()
+            regex = r'^Power Supply #(.*) is (.*)$'
+            match = re.search(regex, line)
+            if match:
+                powerindex = match.group(1)
+                power['status'] = match.group(2) == "OK"
+                powers[powerindex] = power
+
+        environment['power'] = powers
+
+        cmd = 'show environment temp'
+        output = self.device.send_command(cmd)
+        lines = output.splitlines()
+        lines = lines[3:-1]
+
+        temps = dict()
+        for line in lines:
+            temp = dict()
+            vals = line.split()
+            if len(vals) == 4:
+                tempindex = vals[0]
+                temp['temperature'] = vals[2]
+                temp['is_alert'] = vals[1] != "Ok"
+                temp['is_critical'] = vals[1] != "Ok"
+                temps[tempindex] = temp
+
+        environment['temperature'] = temps
+
+        cpu_cmd = 'show process cpu'
 
         output = self.device.send_command(cpu_cmd)
         output = output.strip()
-        environment.setdefault('cpu', {})
-        environment['cpu'][0] = {}
-        environment['cpu'][0]['%load'] = 0.0
 
         lines = output.splitlines()
 
-        while True:
-            line = lines.pop(0)
-            if 'Realtime Statistics' in line:
-                line = lines.pop(0)
-                cpu_regex = r'^.*One minute: (\d+\.\d+); Five.*$'
-                match = re.search(cpu_regex, line)
-                if match is None:
-                    break
-                environment['cpu'][0]['%load'] = float(match.group(1))
-                break
-
-        # Initialize 'power', 'fan', and 'temperature' to default values
-        # (not implemented)
-
-        environment.setdefault('power', {})
-        environment['power']['invalid'] = {
-            'status': True,
-            'output': -1.0,
-            'capacity': -1.0
-            }
-        environment.setdefault('fans', {})
-        environment['fans']['invalid'] = {'status': True}
-        environment.setdefault('temperature', {})
-        environment['temperature']['invalid'] = {
-            'is_alert': False,
-            'is_critical': False,
-            'temperature': -1.0}
+        # cpus = dict()
+        # while True:
+        # line = lines.pop(0)
+        # if 'Realtime Statistics' in line:
+        # line = lines.pop(0)
+        # cpu_regex = r'^.*One minute: (\d+\.\d+); Five.*$'
+        # match = re.search(cpu_regex, line)
+        # if match:
+        # environment['cpu'][0]['%load'] = float(match.group(1))
+        # 
+        # 
         return environment
 
     def get_facts(self):
@@ -148,11 +191,14 @@ class BrocadeDriver(NetworkDriver):
         output = output.split('\n')
         output = output[3:-1]
 
+        fact_table["vendor"] = "Brocade"
+        fact_table["seriel_number"] = "xxxxx"
+
         for line in output:
             if len(line) == 0:
                 return {}
 
-            match = re.search("Up Time.*: (.*)$", line)
+            match = re.search("Up Time.*: up (.*)$", line)
             if match:
                 uptime = match.group(1)
                 fact_table["uptime"] = uptime
@@ -161,18 +207,15 @@ class BrocadeDriver(NetworkDriver):
             if match:
                 os_type = match.group(1)
                 os_version = match.group(2)
-                fact_table["os_type"] = os_type
+                # fact_table["os_type"] = os_type
+                fact_table["model"] = os_type
                 fact_table["os_version"] = os_version
 
             match = re.search("^Management IP.*: (.*)$", line)
             if match:
                 mgmt_ip = match.group(1)
-                fact_table["management_ip"] = mgmt_ip
-
-            match = re.search("^Fan . is (.*)$", line)
-            if match:
-                fan_status = match.group(1)
-                fact_table["fan"] = fan_status
+                fact_table["hostname"] = mgmt_ip
+                fact_table["fqdn"] = mgmt_ip
 
         return fact_table
 
@@ -230,7 +273,7 @@ class BrocadeDriver(NetworkDriver):
                         )
                 entry = {
                     'interface': interface,
-                    'mac': mac,
+                    'mac': helpers.mac(mac),
                     'ip': address,
                     'type': typ,
                     'age': age
@@ -241,6 +284,18 @@ class BrocadeDriver(NetworkDriver):
                     "Unexpected output from: {}".format(line.split()))
 
         return arp_table
+
+    def get_interfaces(self):
+
+        interface_list = {}
+
+        iface_cmd = 'show interface'
+        output = self.device.send_command(iface_cmd)
+        output = output.splitlines()
+
+        for line in output:
+
+            fields = line.split()
 
     def get_interfaces(self):
 
@@ -397,28 +452,46 @@ class BrocadeDriver(NetworkDriver):
     def get_mac_address_table(self):
         """Get mac address table (TBD)."""
 
+        #with pynos.device.Device(conn=conn, auth=auth) as dev:
+        #pprint(dev.mac_table)
+        
         cmd = "show mac-address-table"
         lines = self.device.send_command(cmd)
-        lines = lines.split('\n')
+        lines = lines.splitlines()
 
         mac_address_table = []
-        # Skip the first four lines which is the header
+        # Skip the first 1 lines
         lines = lines[1:-1]
 
         for line in lines:
+
             if len(line) == 0:
-                return {}
-            if len(line.split()) == 7:
-                vlanid, tt, mac_address, type, state, port_type, port = \
+                return mac-address-table
+
+            if len(line.split()) == 6:
+                vlan, mac, typ, state, interface_type, interface = \
                     line.split()
+
+                if state == "Inactive":
+                    active = False
+                else:
+                    active = True
+
+                if typ == "Static":
+                    typ = True
+                else:
+                    typ = False
+
                 entry = {
-                    'vlanid': vlanid,
-                    'mac+address': mac_address,
-                    'type': type,
-                    'state': state,
-                    'port_type': port_type,
-                    'port': port
-                }
+                    'mac': helpers.mac(mac).decode('utf-8'),
+                    'interface': interface.decode('utf-8'),
+                    'vlan': int(vlan),
+                    'static': typ,
+                    'active': active,
+                    'moves': int(-1), 
+                    'last_move': float(0), 
+                    }
+
                 mac_address_table.append(entry)
             else:
                 raise ValueError(

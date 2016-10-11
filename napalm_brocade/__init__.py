@@ -13,4 +13,4 @@
 # the License.
 
 """napalm_skeleton package."""
-from skeleton import SkeletonDriver
+from brocade import BrocadeDriver

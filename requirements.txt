@@ -1,1 +1,1 @@
-napalm_base
+napalm_base==0.17.0
