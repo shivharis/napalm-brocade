@@ -8,6 +8,7 @@
 
 import shlex
 import json
+import pdb
 
 from oslo_config import cfg
 
@@ -17,7 +18,7 @@ service_opts = [
 
     cfg.StrOpt('switch_type',
                   default="",
-                  help='Type of Brocade switch (SLX/VDX)'),
+                  help='Type of Brocade switch (SLX/VDX/MLX)'),
     cfg.StrOpt('switch_ip',
                   default="",
                   help='Switch Mgmt IP Address'),
@@ -178,6 +179,6 @@ def main():
     print 'Done.'
 
 if __name__ == '__main__':
+    pdb.set_trace()
     CONF(default_config_files=['napalm.conf'])
     main()
-

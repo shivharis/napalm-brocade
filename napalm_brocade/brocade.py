@@ -48,6 +48,7 @@ class BrocadeDriver(NetworkDriver):
         CTOR for the device.
         """
 
+        pdb.set_trace()
         if optional_args is None:
             optional_args = {}
 
@@ -61,8 +62,9 @@ class BrocadeDriver(NetworkDriver):
 
     def open(self):
         """Open a connection to the device."""
+        pdb.set_trace()
         try:
-            self.device = ConnectHandler(device_type='brocade_vdx',
+            self.device = ConnectHandler(device_type='vdx',
                                          ip=self.hostname,
                                          port=self.port,
                                          username=self.username,
@@ -182,6 +184,7 @@ class BrocadeDriver(NetworkDriver):
         # environment['cpu'][0]['%load'] = float(match.group(1))
         # 
         # 
+
         return environment
 
     def get_facts(self):
@@ -462,14 +465,10 @@ class BrocadeDriver(NetworkDriver):
         mac_address_table = []
         # Skip the first 1 lines
         lines = lines[1:-1]
-
         for line in lines:
 
-            if len(line) == 0:
-                return mac-address-table
-
-            if len(line.split()) == 6:
-                vlan, mac, typ, state, interface_type, interface = \
+            if len(line.split()) == 7:
+                vlan, tt, mac, typ, state, interface_type, interface = \
                     line.split()
 
                 if state == "Inactive":
