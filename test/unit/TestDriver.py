@@ -16,7 +16,7 @@
 
 import unittest
 
-from napalm_brcd import brcd
+from napalm_brocade import brocade
 from napalm_base.test.base import TestConfigNetworkDriver, TestGettersNetworkDriver
 import json
 
@@ -33,7 +33,7 @@ class TestConfigDriver(unittest.TestCase, TestConfigNetworkDriver):
         cls.vendor = 'brocade'
 
         optional_args = {'port': 12443, }
-        cls.device = brcd.BrcdDriver(hostname, username, password, timeout=60,
+        cls.device = brocade.BrocadeDriver(hostname, username, password, timeout=60,
                                              optional_args=optional_args)
         cls.device.open()
 
@@ -55,7 +55,7 @@ class TestGetterDriver(unittest.TestCase, TestGettersNetworkDriver):
         cls.vendor = 'brocade'
 
         optional_args = {'port': 12443, }
-        cls.device = brcd.BrcdDriver(hostname, username, password, timeout=60,
+        cls.device = brocade.BrocadeDriver(hostname, username, password, timeout=60,
                                              optional_args=optional_args)
 
         if cls.mock:
